@@ -164,8 +164,6 @@ else:
 
 num_users, num_items = adj_train.shape
 
-print(class_values)
-
 num_side_features = 0
 
 # feature loading
