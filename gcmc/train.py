@@ -18,6 +18,8 @@ from gcmc.preprocessing import create_trainvaltest_split, \
     load_data_monti, load_official_trainvaltest_split, normalize_features
 from gcmc.model import RecommenderGAE, RecommenderSideInfoGAE
 from gcmc.utils import construct_feed_dict
+from process_music import process_mpd
+from scipy.sparse import csr_matrix, csc_matrix, coo_matrix, lil_matrix
 
 # Set random seed
 # seed = 123 # use only for unit testing
@@ -162,10 +164,35 @@ else:
                                                                                  datasplit_path, SPLITFROMFILE,
                                                                                  VERBOSE)
 
+print(type(adj_train))
+print(type(train_labels), type(train_u_indices), type(train_v_indices))
+print(len(train_labels), len(train_u_indices), len(train_v_indices))
+print(train_labels, train_u_indices, train_v_indices)
+# print(adj_train[63,435])
+# print(adj_train[492,263])
+# print(adj_train[86,577])
+# print(adj_train[285,400])
+
+
+adj_train, u_features, v_features, test_playlists, train_playlists_count, playlists_tracks = process_mpd()
+
+print(type(coo_matrix(adj_train.toarray())))
+
+adj_train = coo_matrix(adj_train.toarray())
+
+train_labels = adj_train.data
+train_u_indices = adj_train.row
+train_v_indices = adj_train.col
+
+print(type(train_labels), type(train_u_indices), type(train_v_indices))
+print(len(train_labels), len(train_u_indices), len(train_v_indices))
+print(train_labels, train_u_indices, train_v_indices)
+
 num_users, num_items = adj_train.shape
 
-print(class_values)
+#print(class_values)
 
+sys.exit()
 num_side_features = 0
 
 # feature loading
