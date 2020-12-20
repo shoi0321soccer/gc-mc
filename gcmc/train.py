@@ -164,35 +164,27 @@ else:
                                                                                  datasplit_path, SPLITFROMFILE,
                                                                                  VERBOSE)
 
-print(type(adj_train))
-print(type(train_labels), type(train_u_indices), type(train_v_indices))
-print(len(train_labels), len(train_u_indices), len(train_v_indices))
-print(train_labels, train_u_indices, train_v_indices)
-# print(adj_train[63,435])
-# print(adj_train[492,263])
-# print(adj_train[86,577])
-# print(adj_train[285,400])
-
+# print(type(train_labels), type(train_u_indices), type(train_v_indices))
+# print(len(train_labels), len(train_u_indices), len(train_v_indices))
+# print(train_labels, train_u_indices, train_v_indices)
 
 adj_train, u_features, v_features, test_playlists, train_playlists_count, playlists_tracks = process_mpd()
 
-print(type(coo_matrix(adj_train.toarray())))
+train_labels = coo_matrix(adj_train.toarray()).data - 1
+train_u_indices = coo_matrix(adj_train.toarray()).row
+train_v_indices = coo_matrix(adj_train.toarray()).col
+val_labels = train_labels
+val_u_indices = train_u_indices
+val_v_indices = train_v_indices
+test_labels = train_labels
+test_u_indices = train_u_indices
+test_v_indices = train_v_indices
+class_values = np.array([1, 2, 3, 4, 5, 6, 7, 8])
+#sys.exit()
 
-adj_train = coo_matrix(adj_train.toarray())
-
-train_labels = adj_train.data
-train_u_indices = adj_train.row
-train_v_indices = adj_train.col
-
-print(type(train_labels), type(train_u_indices), type(train_v_indices))
-print(len(train_labels), len(train_u_indices), len(train_v_indices))
-print(train_labels, train_u_indices, train_v_indices)
-
+NUMCLASSES = int(train_labels.max())+1
+print("NUMCLASSES:", NUMCLASSES)
 num_users, num_items = adj_train.shape
-
-#print(class_values)
-
-sys.exit()
 num_side_features = 0
 
 # feature loading
@@ -235,10 +227,10 @@ for i in range(NUMCLASSES):
     # build individual binary rating matrices (supports) for each rating
     support_unnormalized = sp.csr_matrix(adj_train_int == i + 1, dtype=np.float32)
 
-    if support_unnormalized.nnz == 0 and DATASET != 'yahoo_music':
-        # yahoo music has dataset split with not all ratings types present in training set.
-        # this produces empty adjacency matrices for these ratings.
-        sys.exit('ERROR: normalized bipartite adjacency matrix has only zero entries!!!!!')
+    # if support_unnormalized.nnz == 0 and DATASET != 'yahoo_music':
+    #     # yahoo music has dataset split with not all ratings types present in training set.
+    #     # this produces empty adjacency matrices for these ratings.
+    #     sys.exit('ERROR: normalized bipartite adjacency matrix has only zero entries!!!!!')
 
     support_unnormalized_transpose = support_unnormalized.T
     support.append(support_unnormalized)
