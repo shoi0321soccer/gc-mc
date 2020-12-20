@@ -173,12 +173,12 @@ adj_train, u_features, v_features, test_playlists, train_playlists_count, playli
 train_labels = coo_matrix(adj_train.toarray()).data - 1
 train_u_indices = coo_matrix(adj_train.toarray()).row
 train_v_indices = coo_matrix(adj_train.toarray()).col
-val_labels = train_labels
-val_u_indices = train_u_indices
-val_v_indices = train_v_indices
-test_labels = train_labels
-test_u_indices = train_u_indices
-test_v_indices = train_v_indices
+# val_labels = train_labels
+# val_u_indices = train_u_indices
+# val_v_indices = train_v_indices
+# test_labels = train_labels
+# test_u_indices = train_u_indices
+# test_v_indices = train_v_indices
 class_values = np.array([1, 2, 3, 4, 5, 6, 7, 8])
 #sys.exit()
 
@@ -427,7 +427,8 @@ for epoch in range(NB_EPOCH):
     # outs = sess.run([model.opt_op, model.loss, model.rmse], feed_dict=train_feed_dict)
     # with exponential moving averages
     outs = sess.run([model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict)
-
+    print(outs)
+    print(type(outs))
     train_avg_loss = outs[1]
     train_rmse = outs[2]
 

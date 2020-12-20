@@ -2,6 +2,7 @@
 README.md
 gcmct.ipynb
 setup.py
+dist/gcmc-0.1-py2.7.egg
 gcmc/__init__.py
 gcmc/data_utils.py
 gcmc/initializations.py
@@ -9,6 +10,7 @@ gcmc/layers.py
 gcmc/metrics.py
 gcmc/model.py
 gcmc/preprocessing.py
+gcmc/process_music.py
 gcmc/run_experiments.sh
 gcmc/train.py
 gcmc/train_mini_batch.py
