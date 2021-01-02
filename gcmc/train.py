@@ -20,6 +20,28 @@ from gcmc.model import RecommenderGAE, RecommenderSideInfoGAE
 from gcmc.utils import construct_feed_dict
 from process_music import process_mpd
 from scipy.sparse import csr_matrix, csc_matrix, coo_matrix, lil_matrix
+from sklearn.feature_extraction import DictVectorizer
+
+
+def main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count):
+    print(user_embeddings.shape)
+    print(item_embeddings.shape)
+    output_file = 'output_lightFM.csv'    
+    fuse_perc = 0.7
+    dv = DictVectorizer()
+    dv.fit_transform(playlists_tracks)
+    with open(output_file, 'w') as fout:
+        print('team_info,shoiTK,creative,shoi0321soccer@gmail.com', file=fout)
+        for i, playlist in enumerate(test_playlists):
+            #LightFM model
+            playlist_pos = train_playlists_count + i
+            y_pred = user_embeddings[playlist_pos].dot(item_embeddings.T) #+ item_biases
+            topn = np.argsort(-y_pred)[:len(playlists_tracks[playlist_pos])+2000]
+            rets = [(dv.feature_names_[t], float(y_pred[t])) for t in topn]
+            songids = [s for s, _ in rets if s not in playlists_tracks[playlist_pos]]
+
+            songids = sorted(songids,  key=lambda x:x[1], reverse=True)
+            print(' , '.join([playlist] + [x for x in songids[:500]]), file=fout)
 
 # Set random seed
 # seed = 123 # use only for unit testing
@@ -173,6 +195,12 @@ adj_train, u_features, v_features, test_playlists, train_playlists_count, playli
 train_labels = coo_matrix(adj_train.toarray()).data - 1
 train_u_indices = coo_matrix(adj_train.toarray()).row
 train_v_indices = coo_matrix(adj_train.toarray()).col
+
+test_playlists_index = list()
+for i, _ in enumerate(test_playlists):
+  test_playlists_index.append(train_playlists_count + i)
+print(test_playlists_index)
+
 # val_labels = train_labels
 # val_u_indices = train_u_indices
 # val_v_indices = train_v_indices
@@ -180,7 +208,6 @@ train_v_indices = coo_matrix(adj_train.toarray()).col
 # test_u_indices = train_u_indices
 # test_v_indices = train_v_indices
 class_values = np.array([1, 2, 3, 4, 5, 6, 7, 8])
-#sys.exit()
 
 NUMCLASSES = int(train_labels.max())+1
 print("NUMCLASSES:", NUMCLASSES)
@@ -281,6 +308,7 @@ val_support_t = support_t[np.array(val_v)]
 
 # Collect all user and item nodes for train set
 train_u = list(set(train_u_indices))
+train_u.extend(test_playlists_index)
 train_v = list(set(train_v_indices))
 train_u_dict = {n: i for i, n in enumerate(train_u)}
 train_v_dict = {n: i for i, n in enumerate(train_v)}
@@ -382,6 +410,8 @@ num_features = u_features[2][1]
 u_features_nonzero = u_features[1].shape[0]
 v_features_nonzero = v_features[1].shape[0]
 
+print(len(train_u_features_side), len(train_v_features_side))
+
 # Feed_dicts for validation and test set stay constant over different update steps
 train_feed_dict = construct_feed_dict(placeholders, u_features, v_features, u_features_nonzero,
                                       v_features_nonzero, train_support, train_support_t,
@@ -426,11 +456,13 @@ for epoch in range(NB_EPOCH):
     # Run single weight update
     # outs = sess.run([model.opt_op, model.loss, model.rmse], feed_dict=train_feed_dict)
     # with exponential moving averages
-    outs = sess.run([model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict)
-    print(outs)
-    print(type(outs))
-    train_avg_loss = outs[1]
-    train_rmse = outs[2]
+    outs = sess.run([model.embeddings, model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict)
+    embeddings = outs[0]
+    user_embeddings = embeddings[0]
+    item_embeddings = embeddings[1]
+
+    train_avg_loss = outs[2]
+    train_rmse = outs[3]
 
     val_avg_loss, val_rmse = sess.run([model.loss, model.rmse], feed_dict=val_feed_dict)
 
@@ -474,6 +506,7 @@ for epoch in range(NB_EPOCH):
         saver = tf.train.Saver()
         saver.restore(sess, save_path)
 
+main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count)
 
 # store model including exponential moving averages
 saver = tf.train.Saver()

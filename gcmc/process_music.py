@@ -207,6 +207,6 @@ def process_mpd():
     print("user_feat_type", type(playlist_features_concat))
     print("item_feat_shape", item_feat.shape)
     print("user_feat_shape", playlist_features_concat.shape)
-    print ("Features matrix created. Training model")
+    print("Features matrix created. Training model")
 
     return interaction_matrix, playlist_features_concat, item_feat, test_playlists, train_playlists_count, playlists_tracks 
