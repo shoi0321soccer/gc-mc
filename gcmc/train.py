@@ -190,7 +190,7 @@ else:
 # print(len(train_labels), len(train_u_indices), len(train_v_indices))
 # print(train_labels, train_u_indices, train_v_indices)
 
-adj_train, u_features, v_features, test_playlists, train_playlists_count, playlists_tracks = process_mpd()
+adj_train, u_features, v_features, test_playlists, train_playlists_count, playlists_tracks = process_mpd(10, 20)
 
 train_labels = coo_matrix(adj_train.toarray()).data - 1
 train_u_indices = coo_matrix(adj_train.toarray()).row
@@ -199,7 +199,6 @@ train_v_indices = coo_matrix(adj_train.toarray()).col
 test_playlists_index = list()
 for i, _ in enumerate(test_playlists):
   test_playlists_index.append(train_playlists_count + i)
-print(test_playlists_index)
 
 # val_labels = train_labels
 # val_u_indices = train_u_indices
@@ -207,10 +206,10 @@ print(test_playlists_index)
 # test_labels = train_labels
 # test_u_indices = train_u_indices
 # test_v_indices = train_v_indices
-class_values = np.array([1, 2, 3, 4, 5, 6, 7, 8])
 
 NUMCLASSES = int(train_labels.max())+1
 print("NUMCLASSES:", NUMCLASSES)
+class_values = np.arange(1, NUMCLASSES+1)
 num_users, num_items = adj_train.shape
 num_side_features = 0
 
@@ -227,14 +226,20 @@ elif FEATURES and u_features is not None and v_features is not None:
     print("Normalizing feature vectors...")
     u_features_side = normalize_features(u_features)
     v_features_side = normalize_features(v_features)
-
+    print("preprocess")
     u_features_side, v_features_side = preprocess_user_item_features(u_features_side, v_features_side)
-
+    
+    print("np.array")
+    print(type(u_features_side))
+    print(u_features_side.shape)
+    print(type(u_features_side.todense()))
     u_features_side = np.array(u_features_side.todense(), dtype=np.float32)
     v_features_side = np.array(v_features_side.todense(), dtype=np.float32)
+    print(type(u_features_side))
+    print(u_features_side.shape)
 
     num_side_features = u_features_side.shape[1]
-
+    print("identity")
     # node id's for node input features
     id_csr_v = sp.identity(num_items, format='csr')
     id_csr_u = sp.identity(num_users, format='csr')
@@ -244,6 +249,7 @@ elif FEATURES and u_features is not None and v_features is not None:
 else:
     raise ValueError('Features flag is set to true but no features are loaded from dataset ' + DATASET)
 
+print("End normaliing eature vector")
 
 # global normalization
 support = []
@@ -410,7 +416,7 @@ num_features = u_features[2][1]
 u_features_nonzero = u_features[1].shape[0]
 v_features_nonzero = v_features[1].shape[0]
 
-print(len(train_u_features_side), len(train_v_features_side))
+#print(len(train_u_features_side), len(train_v_features_side))
 
 # Feed_dicts for validation and test set stay constant over different update steps
 train_feed_dict = construct_feed_dict(placeholders, u_features, v_features, u_features_nonzero,

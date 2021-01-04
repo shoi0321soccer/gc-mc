@@ -82,13 +82,13 @@ def normalize_name(name):
     return name
 
 
-def process_mpd():
+def process_mpd(max_slice, max_challenge_slice):
     prev_songs_window = 10
     playlists_path = '../.././drive/MyDrive/mpd/data/data'
     target_playlists = '../.././drive/MyDrive/mpd/data/challenge_set.json'
     output_file = 'output_lightFM.csv'
-    max_slice = 1 #(1/10)本番消去 max=1000
-    max_challenge_slice = 10 #max=1000 
+    #max_slice = 1 #(1/10)本番消去 max=1000
+    #max_challenge_slice = 10 #max=1000 
 
     max_prev_song = 0
     previous_tracks = defaultdict(lambda: defaultdict(int)) #d['key1']['key2']の定義
