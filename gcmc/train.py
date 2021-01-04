@@ -142,9 +142,9 @@ if DATASET == 'ml_1m' or DATASET == 'ml_100k' or DATASET == 'douban':
     NUMCLASSES = 5
 elif DATASET == 'ml_10m':
     NUMCLASSES = 10
-    print('\n WARNING: this might run out of RAM, consider using train_minibatch.py for dataset %s' % DATASET)
-    print('If you want to proceed with this option anyway, uncomment this.\n')
-    sys.exit(1)
+    #print('\n WARNING: this might run out of RAM, consider using train_minibatch.py for dataset %s' % DATASET)
+    #print('If you want to proceed with this option anyway, uncomment this.\n')
+    #sys.exit(1)
 elif DATASET == 'flixster':
     NUMCLASSES = 10
 elif DATASET == 'yahoo_music':
@@ -314,7 +314,7 @@ val_support_t = support_t[np.array(val_v)]
 
 # Collect all user and item nodes for train set
 train_u = list(set(train_u_indices))
-train_u.extend(test_playlists_index)
+#train_u.extend(test_playlists_index)
 train_v = list(set(train_v_indices))
 train_u_dict = {n: i for i, n in enumerate(train_u)}
 train_v_dict = {n: i for i, n in enumerate(train_v)}
@@ -367,7 +367,7 @@ placeholders = {
     'support': tf.sparse_placeholder(tf.float32, shape=(None, None)),
     'support_t': tf.sparse_placeholder(tf.float32, shape=(None, None)),
 }
-
+print(num_support)
 # create model
 if FEATURES:
     model = RecommenderSideInfoGAE(placeholders,

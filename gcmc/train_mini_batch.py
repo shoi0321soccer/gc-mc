@@ -10,15 +10,38 @@ import time
 import tensorflow as tf
 import numpy as np
 import scipy.sparse as sp
-
+import sys
 import json
 
 from gcmc.preprocessing import create_trainvaltest_split, \
-    sparse_to_tuple, preprocess_user_item_features, globally_normalize_bipartite_adjacency
-from gcmc.model import RecommenderGAE
+    sparse_to_tuple, preprocess_user_item_features, globally_normalize_bipartite_adjacency, \
+    load_data_monti, load_official_trainvaltest_split, normalize_features
+from gcmc.model import RecommenderGAE, RecommenderSideInfoGAE
 from gcmc.utils import construct_feed_dict
 from gcmc.data_utils import data_iterator
+from process_music import process_mpd
+from scipy.sparse import csr_matrix, csc_matrix, coo_matrix, lil_matrix
+from sklearn.feature_extraction import DictVectorizer
 
+def main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count):
+    print(user_embeddings.shape)
+    print(item_embeddings.shape)
+    output_file = 'output_lightFM.csv'    
+    fuse_perc = 0.7
+    dv = DictVectorizer()
+    dv.fit_transform(playlists_tracks)
+    with open(output_file, 'w') as fout:
+        print('team_info,shoiTK,creative,shoi0321soccer@gmail.com', file=fout)
+        for i, playlist in enumerate(test_playlists):
+            #LightFM model
+            playlist_pos = train_playlists_count + i
+            y_pred = user_embeddings[playlist_pos].dot(item_embeddings.T) #+ item_biases
+            topn = np.argsort(-y_pred)[:len(playlists_tracks[playlist_pos])+2000]
+            rets = [(dv.feature_names_[t], float(y_pred[t])) for t in topn]
+            songids = [s for s, _ in rets if s not in playlists_tracks[playlist_pos]]
+
+            songids = sorted(songids,  key=lambda x:x[1], reverse=True)
+            print(' , '.join([playlist] + [x for x in songids[:500]]), file=fout)
 
 # Set random seed
 # seed = 123 # use only for unit testing
@@ -31,6 +54,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-d", "--dataset", type=str, default="ml_1m", choices=['ml_100k', 'ml_1m', 'ml_10m'],
                 help="Dataset string.")
 
+
 ap.add_argument("-lr", "--learning_rate", type=float, default=0.01,
                 help="Learning rate")
 
@@ -40,22 +64,29 @@ ap.add_argument("-e", "--epochs", type=int, default=20,
 ap.add_argument("-hi", "--hidden", type=int, nargs=2, default=[500, 75],
                 help="Number hidden units in 1st and 2nd layer")
 
+ap.add_argument("-fhi", "--feat_hidden", type=int, default=64,
+                help="Number hidden units in the dense layer for features")
+
 ap.add_argument("-ac", "--accumulation", type=str, default="stack", choices=['sum', 'stack'],
                 help="Accumulation function: sum or stack.")
+
 ap.add_argument("-do", "--dropout", type=float, default=0.3,
                 help="Dropout fraction")
+
 ap.add_argument("-edo", "--edge_dropout", type=float, default=0.,
                 help="Edge dropout rate (1 - keep probability).")
+
 ap.add_argument("-nb", "--num_basis_functions", type=int, default=2,
                 help="Number of basis functions for Mixture Model GCN.")
 
 ap.add_argument("-ds", "--data_seed", type=int, default=1234,
                 help="Seed used to shuffle data in data_utils, taken from cf-nade (1234, 2341, 3412, 4123, 1324)")
 
+
 ap.add_argument("-sdir", "--summaries_dir", type=str, default='logs/' + str(datetime.datetime.now()).replace(' ', '_'),
                 help="Dataset string ('ml_100k', 'ml_1m')")
 
-ap.add_argument("-bs", "--batch_size", type=int, default=10000,
+ap.add_argument("-bs", "--batch_size", type=int, default=100000,
                 help="Batch size used for batching loss function contributions.")
 
 # Boolean flags
@@ -112,6 +143,7 @@ ACCUM = args['accumulation']
 SELFCONNECTIONS = False
 SPLITFROMFILE = True
 VERBOSE = True
+
 if DATASET == 'ml_1m' or DATASET == 'ml_100k':
     NUMCLASSES = 5
 elif DATASET == 'ml_10m':
@@ -124,7 +156,10 @@ else:
 if DATASET == 'ml_1m' or DATASET == 'ml_10m':
     datasplit_path = 'data/' + DATASET + '/split_seed' + str(DATASEED) + '.pickle'
 elif DATASET == 'ml_100k':
-    datasplit_path = 'data/' + DATASET + '/nofeatures.pickle'
+    if FEATURES:
+        datasplit_path = 'data/' + DATASET + '/withfeatures.pickle'
+    else:
+        datasplit_path = 'data/' + DATASET + '/nofeatures.pickle'
 
 
 u_features, v_features, adj_train, train_labels, train_u_indices, train_v_indices, \
@@ -132,11 +167,33 @@ val_labels, val_u_indices, val_v_indices, test_labels, \
 test_u_indices, test_v_indices, class_values = create_trainvaltest_split(DATASET, DATASEED, TESTING,
                                                                          datasplit_path, SPLITFROMFILE, VERBOSE)
 
+adj_train, u_features, v_features, test_playlists, train_playlists_count, playlists_tracks = process_mpd(50, 100)
+
+train_labels = coo_matrix(adj_train.toarray()).data - 1
+train_u_indices = coo_matrix(adj_train.toarray()).row
+train_v_indices = coo_matrix(adj_train.toarray()).col
+
+# val_labels = train_labels
+# val_u_indices = train_u_indices
+# val_v_indices = train_v_indices
+# test_labels = train_labels
+# test_u_indices = train_u_indices
+# test_v_indices = train_v_indices
+
+test_playlists_index = list()
+for i, _ in enumerate(test_playlists):
+  test_playlists_index.append(train_playlists_count + i)
+
+NUMCLASSES = int(train_labels.max())+1
+print("NUMCLASSES:", NUMCLASSES)
+class_values = np.arange(1, NUMCLASSES+1)
+
 # num_mini_batch = np.int(np.ceil(train_labels.shape[0]/float(BATCHSIZE)))
 num_mini_batch = train_labels.shape[0]//BATCHSIZE
 print ('num mini batch = ', num_mini_batch)
 
 num_users, num_items = adj_train.shape
+num_side_features = 0
 
 # feature loading
 if not FEATURES:
@@ -144,6 +201,24 @@ if not FEATURES:
     v_features = sp.identity(num_items, format='csr')
 
     u_features, v_features = preprocess_user_item_features(u_features, v_features)
+
+elif FEATURES and u_features is not None and v_features is not None:
+    # use features as side information and node_id's as node input features
+
+    print("Normalizing feature vectors...")
+    u_features_side = normalize_features(u_features)
+    v_features_side = normalize_features(v_features)
+    u_features_side, v_features_side = preprocess_user_item_features(u_features_side, v_features_side)
+
+    u_features_side = np.array(u_features_side.todense(), dtype=np.float32)
+    v_features_side = np.array(v_features_side.todense(), dtype=np.float32)
+
+    num_side_features = u_features_side.shape[1]
+    # node id's for node input features
+    id_csr_v = sp.identity(num_items, format='csr')
+    id_csr_u = sp.identity(num_users, format='csr')
+
+    u_features, v_features = preprocess_user_item_features(id_csr_u, id_csr_v)
 
 else:
     raise ValueError('Features are not supported in this implementation.')
@@ -170,6 +245,13 @@ num_support = len(support)
 support = sp.hstack(support, format='csr')
 support_t = sp.hstack(support_t, format='csr')
 
+if ACCUM == 'stack':
+    div = HIDDEN[0] // num_support
+    if HIDDEN[0] % num_support != 0:
+        print("""\nWARNING: HIDDEN[0] (=%d) of stack layer is adjusted to %d such that
+                  it can be evenly split in %d splits.\n""" % (HIDDEN[0], num_support * div, num_support))
+    HIDDEN[0] = num_support * div
+
 # Collect all user and item nodes for test set
 test_u = list(set(test_u_indices))
 test_v = list(set(test_v_indices))
@@ -194,6 +276,27 @@ val_v_indices = np.array([val_v_dict[o] for o in val_v_indices])
 val_support = support[np.array(val_u)]
 val_support_t = support_t[np.array(val_v)]
 
+# features as side info
+if FEATURES:
+    test_u_features_side = u_features_side[np.array(test_u)]
+    test_v_features_side = v_features_side[np.array(test_v)]
+
+    val_u_features_side = u_features_side[np.array(val_u)]
+    val_v_features_side = v_features_side[np.array(val_v)]
+
+    train_u_features_side = u_features_side[np.array(train_u)]
+    train_v_features_side = v_features_side[np.array(train_v)]
+
+else:
+    test_u_features_side = None
+    test_v_features_side = None
+
+    val_u_features_side = None
+    val_v_features_side = None
+
+    train_u_features_side = None
+    train_v_features_side = None
+
 placeholders = {
     'u_features': tf.sparse_placeholder(tf.float32, shape=np.array(u_features.shape, dtype=np.int64)),
     'v_features': tf.sparse_placeholder(tf.float32, shape=np.array(v_features.shape, dtype=np.int64)),
@@ -201,30 +304,50 @@ placeholders = {
     'v_features_nonzero': tf.placeholder(tf.int32, shape=()),
     'labels': tf.placeholder(tf.int32, shape=(None,)),
 
+    'u_features_side': tf.placeholder(tf.float32, shape=(None, num_side_features)),
+    'v_features_side': tf.placeholder(tf.float32, shape=(None, num_side_features)),
+
     'user_indices': tf.placeholder(tf.int32, shape=(None,)),
     'item_indices': tf.placeholder(tf.int32, shape=(None,)),
 
     'dropout': tf.placeholder_with_default(0., shape=()),
 
     'class_values': tf.placeholder(tf.float32, shape=class_values.shape),
+    'weight_decay': tf.placeholder_with_default(0., shape=()),
 
     'support': tf.sparse_placeholder(tf.float32, shape=(None, None)),
     'support_t': tf.sparse_placeholder(tf.float32, shape=(None, None)),
 }
-
+print(num_support)
 # create model
-model = RecommenderGAE(placeholders,
-                       input_dim=u_features.shape[1],
-                       num_classes=NUMCLASSES,
-                       num_support=num_support,
-                       self_connections=SELFCONNECTIONS,
-                       num_basis_functions=BASES,
-                       hidden=HIDDEN,
-                       num_users=num_users,
-                       num_items=num_items,
-                       accum=ACCUM,
-                       learning_rate=LR,
-                       logging=True)
+if FEATURES:
+    model = RecommenderSideInfoGAE(placeholders,
+                                   input_dim=u_features.shape[1],
+                                   feat_hidden_dim=FEATHIDDEN,
+                                   num_classes=NUMCLASSES,
+                                   num_support=num_support,
+                                   self_connections=SELFCONNECTIONS,
+                                   num_basis_functions=BASES,
+                                   hidden=HIDDEN,
+                                   num_users=num_users,
+                                   num_items=num_items,
+                                   accum=ACCUM,
+                                   learning_rate=LR,
+                                   num_side_features=num_side_features,
+                                   logging=True)
+else:
+    model = RecommenderGAE(placeholders,
+                           input_dim=u_features.shape[1],
+                           num_classes=NUMCLASSES,
+                           num_support=num_support,
+                           self_connections=SELFCONNECTIONS,
+                           num_basis_functions=BASES,
+                           hidden=HIDDEN,
+                           num_users=num_users,
+                           num_items=num_items,
+                           accum=ACCUM,
+                           learning_rate=LR,
+                           logging=True)
 
 # Convert sparse placeholders to tuples to construct feed_dict
 test_support = sparse_to_tuple(test_support)
@@ -232,7 +355,6 @@ test_support_t = sparse_to_tuple(test_support_t)
 
 val_support = sparse_to_tuple(val_support)
 val_support_t = sparse_to_tuple(val_support_t)
-
 
 u_features = sparse_to_tuple(u_features)
 v_features = sparse_to_tuple(v_features)
@@ -246,11 +368,13 @@ v_features_nonzero = v_features[1].shape[0]
 # No dropout for validation and test runs
 val_feed_dict = construct_feed_dict(placeholders, u_features, v_features, u_features_nonzero,
                                     v_features_nonzero, val_support, val_support_t,
-                                    val_labels, val_u_indices, val_v_indices, class_values, 0.)
+                                    val_labels, val_u_indices, val_v_indices, class_values, 0.,
+                                    val_u_features_side, val_v_features_side)
 
 test_feed_dict = construct_feed_dict(placeholders, u_features, v_features, u_features_nonzero,
                                      v_features_nonzero, test_support, test_support_t,
-                                     test_labels, test_u_indices, test_v_indices, class_values, 0.)
+                                     test_labels, test_u_indices, test_v_indices, class_values, 0.,
+                                     test_u_features_side, test_v_features_side)
 
 # Collect all variables to be logged into summary
 merged_summary = tf.summary.merge_all()
