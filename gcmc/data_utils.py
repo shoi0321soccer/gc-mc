@@ -16,7 +16,7 @@ import shutil
 import os.path
 
 
-def data_iterator(data, batch_size):
+def data_iterator_original(data, batch_size):
     """
     A simple data iterator from https://indico.io/blog/tensorflow-data-inputs-part1-placeholders-protobufs-queues/
     :param data: list of numpy tensors that need to be randomly batched across their first dimension.
@@ -35,6 +35,27 @@ def data_iterator(data, batch_size):
         data_batch = [dat[i*batch_size:(i+1)*batch_size] for dat in shuf_data]
         yield data_batch
 
+def data_iterator(data, batch_size):
+    """
+    A simple data iterator from https://indico.io/blog/tensorflow-data-inputs-part1-placeholders-protobufs-queues/
+    :param data: list of numpy tensors that need to be randomly batched across their first dimension.
+    :param batch_size: int, batch_size of data_iterator.
+    Assumes same first dimension size of all numpy tensors.
+    :return: iterator over batches of numpy tensors
+    """
+    #([train_u_indices, train_v_indices, train_labels], batch_size=BATCHSIZE)
+
+    # shuffle labels and features
+    max_idx = len(data[0])
+    print(max_idx)
+    idxs = np.arange(0, max_idx)
+    np.random.shuffle(idxs)
+    shuf_data = [dat[idxs] for dat in data]
+
+    # Does not yield last remainder of size less than batch_size
+    for i in range(max_idx//batch_size):
+        data_batch = [dat[i*batch_size:(i+1)*batch_size] for dat in shuf_data]
+        yield data_batch
 
 def map_data(data):
     """
