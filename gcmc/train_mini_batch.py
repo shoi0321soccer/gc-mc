@@ -161,30 +161,25 @@ elif DATASET == 'ml_100k':
     else:
         datasplit_path = 'data/' + DATASET + '/nofeatures.pickle'
 
-
 u_features, v_features, adj_train, train_labels, train_u_indices, train_v_indices, \
 val_labels, val_u_indices, val_v_indices, test_labels, \
 test_u_indices, test_v_indices, class_values = create_trainvaltest_split(DATASET, DATASEED, TESTING,
                                                                          datasplit_path, SPLITFROMFILE, VERBOSE)
 
 adj_train, u_features, v_features, test_playlists, \
-train_playlists_count, playlists_tracks = process_mpd(50, 10000)
+train_playlists_count, playlists_tracks = process_mpd(10, 1000)
 
-print(adj_train.shape)
-
-train_labels1 = np.ndarray([])
-train_u_indices1 = np.ndarray([])
-train_v_indices1 = np.ndarray([])
+train_labels = np.ndarray([])
+train_u_indices = np.ndarray([])
+train_v_indices = np.ndarray([])
 last_train_labels = adj_train.shape[0]-1
 for i, adj in enumerate(adj_train):
-  if i == last_train_labels:
-    print("end!!", i)
   if (i % 100 == 99) or i == last_train_labels:
     adj2 = sp.vstack([adj2, adj])
     adj2 = coo_matrix(adj2.toarray())
-    train_labels1 = np.append(train_labels1, adj2.data - 1)
-    train_u_indices1 = np.append(train_u_indices1, adj2.row + i//100)
-    train_v_indices1 = np.append(train_v_indices1, adj2.col)
+    train_labels = np.append(train_labels, adj2.data - 1)
+    train_u_indices = np.append(train_u_indices, adj2.row + i//100)
+    train_v_indices = np.append(train_v_indices, adj2.col)
   elif i % 100 == 0:
     adj2 = adj
   else:
@@ -197,9 +192,9 @@ for i, adj in enumerate(adj_train):
 # val_labels = train_labels
 # val_u_indices = train_u_indices
 # val_v_indices = train_v_indices
-# test_labels = train_labels
-# test_u_indices = train_u_indices
-# test_v_indices = train_v_indices
+test_labels = train_labels
+test_u_indices = train_u_indices
+test_v_indices = train_v_indices
 
 test_playlists_index = list()
 for i, _ in enumerate(test_playlists):
@@ -216,6 +211,7 @@ print ('train_labels.shape = ', train_labels.shape[0])
 print ('num mini batch = ', num_mini_batch)
 
 num_users, num_items = adj_train.shape
+print(num_users, num_items)
 num_side_features = 0
 
 # feature loading
@@ -419,6 +415,9 @@ wait = 0
 
 print('Training...')
 
+train_u = list(set(train_u_indices))
+train_v = list(set(train_v_indices))
+print("train u and v:", len(train_u), len(train_v))
 for epoch in range(NB_EPOCH):
 
     batch_iter = 0
@@ -453,6 +452,11 @@ for epoch in range(NB_EPOCH):
             outs = sess.run([model.embeddings, model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict_batch)
             train_avg_loss = outs[2]
             train_rmse = outs[3]
+            embeddings = outs[0]
+            user_embeddings = embeddings[0]
+            item_embeddings = embeddings[1]
+            print(len(train_u), len(train_v), len(train_u_indices_batch), len(train_v_indices_batch))
+            print(user_embeddings.shape, item_embeddings.shape)
 
             val_avg_loss, val_rmse = sess.run([model.loss, model.rmse], feed_dict=val_feed_dict)
 
@@ -466,6 +470,7 @@ for epoch in range(NB_EPOCH):
                       "\t\ttime=", "{:.5f}".format(time.time() - t))
 
             if val_rmse < best_val_score:
+                
                 best_val_score = val_rmse
                 best_epoch = epoch*num_mini_batch + batch_iter
 
@@ -502,19 +507,15 @@ for epoch in range(NB_EPOCH):
 
     except StopIteration:
         pass
-embeddings = outs[0]
-user_embeddings = embeddings[0]
-item_embeddings = embeddings[1]
-main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count)
+
+#main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count)
 # store model including exponential moving averages
 saver = tf.train.Saver()
 save_path = saver.save(sess, "tmp/%s.ckpt" % model.name, global_step=model.global_step)
 
-
 if VERBOSE:
     print("\nOptimization Finished!")
     print('best validation score =', best_val_score, 'at iteration', best_epoch)
-
 
 if TESTING:
     test_avg_loss, test_rmse = sess.run([model.loss, model.rmse], feed_dict=test_feed_dict)

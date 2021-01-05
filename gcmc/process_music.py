@@ -205,6 +205,7 @@ def process_mpd(max_slice, max_challenge_slice):
     print("num_track", len_dv_feature_names)
     #print("item_feat_type", type(item_feat))
     #print("user_feat_type", type(playlist_features_concat))
+    print("matrix", interaction_matrix)
     print("item_feat_shape", item_feat.shape)
     print("user_feat_shape", playlist_features_concat.shape)
     print("Features matrix created.")
