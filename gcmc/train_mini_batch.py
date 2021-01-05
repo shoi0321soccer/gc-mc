@@ -86,7 +86,7 @@ ap.add_argument("-ds", "--data_seed", type=int, default=1234,
 ap.add_argument("-sdir", "--summaries_dir", type=str, default='logs/' + str(datetime.datetime.now()).replace(' ', '_'),
                 help="Dataset string ('ml_100k', 'ml_1m')")
 
-ap.add_argument("-bs", "--batch_size", type=int, default=100000,
+ap.add_argument("-bs", "--batch_size", type=int, default=10000,
                 help="Batch size used for batching loss function contributions.")
 
 # Boolean flags
@@ -167,11 +167,32 @@ val_labels, val_u_indices, val_v_indices, test_labels, \
 test_u_indices, test_v_indices, class_values = create_trainvaltest_split(DATASET, DATASEED, TESTING,
                                                                          datasplit_path, SPLITFROMFILE, VERBOSE)
 
-adj_train, u_features, v_features, test_playlists, train_playlists_count, playlists_tracks = process_mpd(50, 100)
+adj_train, u_features, v_features, test_playlists, \
+train_playlists_count, playlists_tracks = process_mpd(50, 10000)
 
-train_labels = coo_matrix(adj_train.toarray()).data - 1
-train_u_indices = coo_matrix(adj_train.toarray()).row
-train_v_indices = coo_matrix(adj_train.toarray()).col
+print(adj_train.shape)
+
+train_labels1 = np.ndarray([])
+train_u_indices1 = np.ndarray([])
+train_v_indices1 = np.ndarray([])
+last_train_labels = adj_train.shape[0]-1
+for i, adj in enumerate(adj_train):
+  if i == last_train_labels:
+    print("end!!", i)
+  if (i % 100 == 99) or i == last_train_labels:
+    adj2 = sp.vstack([adj2, adj])
+    adj2 = coo_matrix(adj2.toarray())
+    train_labels1 = np.append(train_labels1, adj2.data - 1)
+    train_u_indices1 = np.append(train_u_indices1, adj2.row + i//100)
+    train_v_indices1 = np.append(train_v_indices1, adj2.col)
+  elif i % 100 == 0:
+    adj2 = adj
+  else:
+    adj2 = sp.vstack([adj2, adj])
+
+#train_labels = coo_matrix(adj_train.toarray()).data - 1
+#train_u_indices = coo_matrix(adj_train.toarray()).row
+#train_v_indices = coo_matrix(adj_train.toarray()).col
 
 # val_labels = train_labels
 # val_u_indices = train_u_indices
@@ -190,6 +211,8 @@ class_values = np.arange(1, NUMCLASSES+1)
 
 # num_mini_batch = np.int(np.ceil(train_labels.shape[0]/float(BATCHSIZE)))
 num_mini_batch = train_labels.shape[0]//BATCHSIZE
+print("BATCHSIZE", BATCHSIZE)
+print ('train_labels.shape = ', train_labels.shape[0])
 print ('num mini batch = ', num_mini_batch)
 
 num_users, num_items = adj_train.shape
@@ -427,10 +450,9 @@ for epoch in range(NB_EPOCH):
                                                         train_v_indices_batch, class_values, DO)
 
             # with exponential moving averages
-            outs = sess.run([model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict_batch)
-
-            train_avg_loss = outs[1]
-            train_rmse = outs[2]
+            outs = sess.run([model.embeddings, model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict_batch)
+            train_avg_loss = outs[2]
+            train_rmse = outs[3]
 
             val_avg_loss, val_rmse = sess.run([model.loss, model.rmse], feed_dict=val_feed_dict)
 
@@ -480,7 +502,10 @@ for epoch in range(NB_EPOCH):
 
     except StopIteration:
         pass
-
+embeddings = outs[0]
+user_embeddings = embeddings[0]
+item_embeddings = embeddings[1]
+main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count)
 # store model including exponential moving averages
 saver = tf.train.Saver()
 save_path = saver.save(sess, "tmp/%s.ckpt" % model.name, global_step=model.global_step)

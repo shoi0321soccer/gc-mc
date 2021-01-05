@@ -103,7 +103,7 @@ def process_mpd(max_slice, max_challenge_slice):
     for filename in sorted(filenames):
         if filename.startswith("mpd.slice") and filename.endswith(".json"):
             fullpath = os.sep.join((playlists_path, filename))
-            print(fullpath)
+            #print(fullpath)
             f = open(fullpath, "r")
             js = f.read()
             f.close()
@@ -138,7 +138,7 @@ def process_mpd(max_slice, max_challenge_slice):
     i=0
     for playlist in target["playlists"]:
         i+=1
-        if i % 1000 == 0:
+        if i % 10000 == 0:
             print(i)
         if i > max_challenge_slice:
             break
@@ -188,8 +188,8 @@ def process_mpd(max_slice, max_challenge_slice):
         #     print("Failed loading json", track)
         #     f = None
         get_audio_time += 1
-        if get_audio_time % 10000 == 0:
-          print("get audio time :", get_audio_time, "/", len_dv_feature_names)
+        #if get_audio_time % 10000 == 0:
+          #print("get audio time :", get_audio_time, "/", len_dv_feature_names)
         f = None
         curr_highlevel = {}
         if f is not None:
@@ -203,10 +203,10 @@ def process_mpd(max_slice, max_challenge_slice):
 
 
     print("num_track", len_dv_feature_names)
-    print("item_feat_type", type(item_feat))
-    print("user_feat_type", type(playlist_features_concat))
+    #print("item_feat_type", type(item_feat))
+    #print("user_feat_type", type(playlist_features_concat))
     print("item_feat_shape", item_feat.shape)
     print("user_feat_shape", playlist_features_concat.shape)
-    print("Features matrix created. Training model")
+    print("Features matrix created.")
 
     return interaction_matrix, playlist_features_concat, item_feat, test_playlists, train_playlists_count, playlists_tracks 
