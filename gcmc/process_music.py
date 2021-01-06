@@ -9,7 +9,6 @@ def get_sample_dict(all_features=True):
     # This is used to train DictVectorizer
     return get_audio_features_dict("00006c661b0c80ef519ba561e321d100", all_features)
 
-
 def get_audio_features_dict(songid, all_features=True):
     # This method returns all the audio features of a song or only the highlevel features
     audio_path = ESSENTIA_PATH.format(songid[:2], songid[2:4], songid)
@@ -119,7 +118,6 @@ def process_mpd(max_slice, max_challenge_slice):
                 playlists_extra['name'].append(nname)
                 tracks = defaultdict(int)
                 sorted_tracks = sorted(playlist['tracks'], key=lambda k: k['pos'])
-                #prev_track = []
                 for track in sorted_tracks:
                     track_uri_key = track['track_uri']
                     tracks[track_uri_key] += 1
@@ -138,11 +136,8 @@ def process_mpd(max_slice, max_challenge_slice):
     i=0
     for playlist in target["playlists"]:
         i+=1
-        if i % 10000 == 0:
-            print(i)
         if i > max_challenge_slice:
             break
-
         nname = ""
         if 'name' in playlist:
             nname = normalize_name(playlist['name'])
@@ -153,11 +148,9 @@ def process_mpd(max_slice, max_challenge_slice):
         if len(playlist['tracks']) == 0:
             playlists_tracks.append({})
             continue
-
         tracks = defaultdict(int)
         for track in playlist['tracks']:
             tracks[track['track_uri']] += 1
-
         playlists_tracks.append(tracks)
 
     print ("Data loaded. Creating features matrix")
@@ -203,9 +196,7 @@ def process_mpd(max_slice, max_challenge_slice):
 
 
     print("num_track", len_dv_feature_names)
-    #print("item_feat_type", type(item_feat))
-    #print("user_feat_type", type(playlist_features_concat))
-    print("matrix", interaction_matrix)
+    print("max_NUMCLASSES: ",interaction_matrix.max())
     print("item_feat_shape", item_feat.shape)
     print("user_feat_shape", playlist_features_concat.shape)
     print("Features matrix created.")

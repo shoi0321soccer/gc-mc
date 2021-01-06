@@ -6,6 +6,7 @@ from __future__ import print_function
 import argparse
 import datetime
 import time
+from tqdm import tqdm
 
 import tensorflow as tf
 import numpy as np
@@ -24,8 +25,6 @@ from scipy.sparse import csr_matrix, csc_matrix, coo_matrix, lil_matrix
 from sklearn.feature_extraction import DictVectorizer
 
 def main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count):
-    print(user_embeddings.shape)
-    print(item_embeddings.shape)
     output_file = 'output_lightFM.csv'    
     fuse_perc = 0.7
     dv = DictVectorizer()
@@ -33,13 +32,11 @@ def main_process(user_embeddings, item_embeddings, playlists_tracks, test_playli
     with open(output_file, 'w') as fout:
         print('team_info,shoiTK,creative,shoi0321soccer@gmail.com', file=fout)
         for i, playlist in enumerate(test_playlists):
-            #LightFM model
             playlist_pos = train_playlists_count + i
-            y_pred = user_embeddings[playlist_pos].dot(item_embeddings.T) #+ item_biases
-            topn = np.argsort(-y_pred)[:len(playlists_tracks[playlist_pos])+2000]
+            y_pred = user_embeddings[playlist_pos].dot(item_embeddings[playlist_pos//100].T) #+ item_biases
+            topn = np.argsort(-y_pred)[:len(playlists_tracks[playlist_pos])+1000]
             rets = [(dv.feature_names_[t], float(y_pred[t])) for t in topn]
             songids = [s for s, _ in rets if s not in playlists_tracks[playlist_pos]]
-
             songids = sorted(songids,  key=lambda x:x[1], reverse=True)
             print(' , '.join([playlist] + [x for x in songids[:500]]), file=fout)
 
@@ -134,6 +131,7 @@ LR = args['learning_rate']
 WRITESUMMARY = args['write_summary']
 SUMMARIESDIR = args['summaries_dir']
 FEATURES = args['features']
+FEATHIDDEN = args['feat_hidden']
 TESTING = args['testing']
 BATCHSIZE = args['batch_size']
 SYM = args['norm_symmetric']
@@ -166,7 +164,7 @@ test_u_indices, test_v_indices, class_values = create_trainvaltest_split(DATASET
                                                                          datasplit_path, SPLITFROMFILE, VERBOSE)
 
 adj_train, u_features, v_features, test_playlists, \
-train_playlists_count, playlists_tracks = process_mpd(2, 1000)
+train_playlists_count, playlists_tracks = process_mpd(1, 100)
 
 train_labels = []
 train_u_indices = []
@@ -178,6 +176,9 @@ test_u_indices_set = []
 test_v_indices_set = []
 num_max = 0
 num_mini_batch = 0
+NUMCLASSES = int(adj_train.max())+1
+class_values = np.arange(1, NUMCLASSES+1)
+print("matrix size: ", sys.getsizeof(adj_train), adj_train.shape)
 for i, adj in enumerate(adj_train):
   if (i % 100 == 99) or i == last_train_labels:
     adj2 = sp.vstack([adj2, adj])
@@ -186,41 +187,22 @@ for i, adj in enumerate(adj_train):
     train_labels.append(adj2.data)
     train_u_indices.append(adj2.row + 100*(i//100))
     train_v_indices.append(adj2.col)
-
+    
+    #print(coo_matrix((data, (row, col))))
+    # a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
+    # adj2 = coo_matrix(adj2 + a)
+    # test_labels_set.append(adj2.data)
+    # test_u_indices_set.append(adj2.row + 100*(i//100))
+    # test_v_indices_set.append(adj2.col)
     num_mini_batch += 1
-    if adj2.data.any():
-      if num_max < (adj2.data).max():
-        num_max = (adj2.data).max()
-
-    a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
-    adj2 = coo_matrix(adj2 + a)
-    test_labels_set.append(adj2.data)
-    test_u_indices_set.append(adj2.row + 100*(i//100))
-    test_v_indices_set.append(adj2.col)
-
   elif i % 100 == 0:
     adj2 = adj
   else:
     adj2 = sp.vstack([adj2, adj])
 
-# test_labels_set = train_labels
-# test_u_indices_set = train_u_indices
-# test_v_indices_set = train_v_indices
+train_u = list(set(coo_matrix(adj_train.toarray()).row))
+train_v = list(set(coo_matrix(adj_train.toarray()).col))
 
-# print(last_train_labels, len(test_labels_set))
-# for i in range(len(test_labels_set)):
-#   print(test_labels_set[i][:5], test_u_indices_set[i][:5], test_v_indices_set[i][:5])
-
-#print(max(train_u))
-#print(len(train_labels), len(train_u_indices), len(train_v_indices), len(train_u), len(train_v))
-
-#train_labels = coo_matrix(adj_train.toarray()).data - 1
-#train_u_indices = coo_matrix(adj_train.toarray()).row
-#train_v_indices = coo_matrix(adj_train.toarray()).col
-
-# val_labels = train_labels
-# val_u_indices = train_u_indices
-# val_v_indices = train_v_indices
 test_labels = train_labels
 test_u_indices = train_u_indices
 test_v_indices = train_v_indices
@@ -229,18 +211,11 @@ test_playlists_index = list()
 for i, _ in enumerate(test_playlists):
   test_playlists_index.append(train_playlists_count + i)
 
-NUMCLASSES = int(num_max)+2
-print("NUMCLASSES:", NUMCLASSES)
-class_values = np.arange(1, NUMCLASSES+1)
-
-# num_mini_batch = np.int(np.ceil(train_labels.shape[0]/float(BATCHSIZE)))
-#BATCHSIZE = train_labels.shape[0]//num_mini_batch
-#print("BATCHSIZE", BATCHSIZE)
-#print ('train_labels.shape = ', train_labels.shape[0])
-print ('num mini batch = ', num_mini_batch)
-
 num_users, num_items = adj_train.shape
-print(num_users, num_items)
+
+print("NUMCLASSES:", NUMCLASSES)
+print ('num mini batch = ', num_mini_batch)
+print("num_users: ", num_users, "num_items: ", num_items)
 num_side_features = 0
 
 # feature loading
@@ -300,18 +275,6 @@ if ACCUM == 'stack':
                   it can be evenly split in %d splits.\n""" % (HIDDEN[0], num_support * div, num_support))
     HIDDEN[0] = num_support * div
 
-# Collect all user and item nodes for test set
-# test_u = list(set(test_u_indices))
-# test_v = list(set(test_v_indices))
-# test_u_dict = {n: i for i, n in enumerate(test_u)}
-# test_v_dict = {n: i for i, n in enumerate(test_v)}
-
-# test_u_indices = np.array([test_u_dict[o] for o in test_u_indices])
-# test_v_indices = np.array([test_v_dict[o] for o in test_v_indices])
-
-# test_support = support[np.array(test_u)]
-# test_support_t = support_t[np.array(test_v)]
-
 # Collect all user and item nodes for validation set
 val_u = list(set(val_u_indices))
 val_v = list(set(val_v_indices))
@@ -326,11 +289,11 @@ val_support_t = support_t[np.array(val_v)]
 
 # features as side info
 if FEATURES:
-    test_u_features_side = u_features_side[np.array(test_u)]
-    test_v_features_side = v_features_side[np.array(test_v)]
+    test_u_features_side = None#u_features_side[np.array(test_u)]
+    test_v_features_side = None #v_features_side[np.array(test_v)]
 
-    val_u_features_side = u_features_side[np.array(val_u)]
-    val_v_features_side = v_features_side[np.array(val_v)]
+    val_u_features_side = None #u_features_side[np.array(val_u)]
+    val_v_features_side = None #v_features_side[np.array(val_v)]
 
     train_u_features_side = u_features_side[np.array(train_u)]
     train_v_features_side = v_features_side[np.array(train_v)]
@@ -397,10 +360,6 @@ else:
                            learning_rate=LR,
                            logging=True)
 
-# Convert sparse placeholders to tuples to construct feed_dict
-#test_support = sparse_to_tuple(test_support)
-#test_support_t = sparse_to_tuple(test_support_t)
-
 val_support = sparse_to_tuple(val_support)
 val_support_t = sparse_to_tuple(val_support_t)
 
@@ -418,11 +377,6 @@ val_feed_dict = construct_feed_dict(placeholders, u_features, v_features, u_feat
                                     v_features_nonzero, val_support, val_support_t,
                                     val_labels, val_u_indices, val_v_indices, class_values, 0.,
                                     val_u_features_side, val_v_features_side)
-
-# test_feed_dict = construct_feed_dict(placeholders, u_features, v_features, u_features_nonzero,
-#                                      v_features_nonzero, test_support, test_support_t,
-#                                      test_labels, test_u_indices, test_v_indices, class_values, 0.,
-#                                      test_u_features_side, test_v_features_side)
 
 # Collect all variables to be logged into summary
 merged_summary = tf.summary.merge_all()
@@ -455,6 +409,15 @@ for epoch in range(NB_EPOCH):
     train_v_indices_batch = train_v_indices[i]
     train_labels_batch = train_labels[i]
 
+    adj2 = coo_matrix((train_labels_batch, (train_u_indices_batch, train_v_indices_batch)))
+    a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
+    NUMCLASSES = int(adj2.max())+1
+    #class_values = np.arange(1, NUMCLASSES+1)
+    adj2 = coo_matrix(adj2 + a)
+    train_u_indices_batch = adj2.data
+    train_v_indices_batch = adj2.row + 100*i
+    train_labels_batch = adj2.col
+
     # Collect all user and item nodes for train set
     train_u = list(set(train_u_indices_batch))
     train_v = list(set(train_v_indices_batch))
@@ -478,11 +441,12 @@ for epoch in range(NB_EPOCH):
     outs = sess.run([model.embeddings, model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict_batch)
     train_avg_loss = outs[2]
     train_rmse = outs[3]
+    #print("embeddings:", outs[0][0].shape, outs[0][1].shape)
     #print(len(train_u), len(train_v), len(train_u_indices_batch), len(train_v_indices_batch))
 
     val_avg_loss, val_rmse = sess.run([model.loss, model.rmse], feed_dict=val_feed_dict)
 
-    if VERBOSE:
+    if VERBOSE and batch_iter == num_mini_batch-1:
         print('[*] Iteration: %04d' % (epoch*num_mini_batch + batch_iter),  " Epoch:", '%04d' % epoch,
               "minibatch iter:", '%04d' % batch_iter,
               "train_loss=", "{:.5f}".format(train_avg_loss),
@@ -495,17 +459,6 @@ for epoch in range(NB_EPOCH):
         
         best_val_score = val_rmse
         best_epoch = epoch*num_mini_batch + batch_iter
-
-    # if batch_iter % 20 == 0 and WRITESUMMARY:
-    #     # Train set summary
-    #     summary = sess.run(merged_summary, feed_dict=train_feed_dict_batch)
-    #     train_summary_writer.add_summary(summary, epoch*num_mini_batch+batch_iter)
-    #     train_summary_writer.flush()
-
-    #     # Validation set summary
-    #     summary = sess.run(merged_summary, feed_dict=val_feed_dict)
-    #     val_summary_writer.add_summary(summary, epoch*num_mini_batch+batch_iter)
-    #     val_summary_writer.flush()
 
     if epoch*num_mini_batch+batch_iter % 100 == 0 and not TESTING and False:
         saver = tf.train.Saver()
@@ -524,8 +477,7 @@ for epoch in range(NB_EPOCH):
         # load back normal variables
         saver = tf.train.Saver()
         saver.restore(sess, save_path)
-
-  batch_iter += 1
+    batch_iter += 1
 
 # store model including exponential moving averages
 saver = tf.train.Saver()
@@ -536,7 +488,7 @@ if VERBOSE:
     print('best validation score =', best_val_score, 'at iteration', best_epoch)
 
 user_embeddings_vstack = np.ndarray([])
-item_embeddings_vstack = np.ndarray([])
+item_embeddings_vstack = []
 if TESTING:
     for j in range(len(test_labels_set)):
       #print(j, test_labels_set[j][:5], test_u_indices_set[j][:5], test_v_indices_set[j][:5])
@@ -564,22 +516,12 @@ if TESTING:
       item_embeddings = embeddings[1]
       if j == 0:
         user_embeddings_vstack = user_embeddings
-        item_embeddings_vstack = item_embeddings
+        item_embeddings_vstack.append(item_embeddings)
       else:
         user_embeddings_vstack = np.vstack((user_embeddings_vstack, user_embeddings))
-        item_embeddings_vstack = np.vstack((item_embeddings_vstack, item_embeddings))
+        item_embeddings_vstack.append(item_embeddings)
 
       print("Iteration", j, 'test loss:', outs[1], 'test rmse:', outs[2])
-
-    # restore with polyak averages of parameters
-    # variables_to_restore = model.variable_averages.variables_to_restore()
-    # saver = tf.train.Saver(variables_to_restore)
-    # saver.restore(sess, save_path)
-
-    # test_avg_loss, test_rmse = sess.run([model.loss, model.rmse], feed_dict=test_feed_dict)
-    # print('polyak test loss = ', test_avg_loss)
-    # print('polyak test rmse = ', test_rmse)
-
 else:
     # restore with polyak averages of parameters
     variables_to_restore = model.variable_averages.variables_to_restore()
