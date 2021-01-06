@@ -176,7 +176,7 @@ test_u_indices_set = []
 test_v_indices_set = []
 num_max = 0
 num_mini_batch = 0
-NUMCLASSES = int(adj_train.max())+1
+NUMCLASSES = int(adj_train.max())
 class_values = np.arange(1, NUMCLASSES+1)
 print("matrix size: ", sys.getsizeof(adj_train), adj_train.shape)
 for i, adj in enumerate(adj_train):
@@ -184,7 +184,7 @@ for i, adj in enumerate(adj_train):
     adj2 = sp.vstack([adj2, adj])
     adj2 = coo_matrix(adj2.toarray())
 
-    train_labels.append(adj2.data)
+    train_labels.append(adj2.data-1)
     train_u_indices.append(adj2.row + 100*(i//100))
     train_v_indices.append(adj2.col)
     
@@ -408,15 +408,14 @@ for epoch in range(NB_EPOCH):
     train_u_indices_batch = train_u_indices[i]
     train_v_indices_batch = train_v_indices[i]
     train_labels_batch = train_labels[i]
-
-    adj2 = coo_matrix((train_labels_batch, (train_u_indices_batch, train_v_indices_batch)))
+    print(train_v_indices_batch.max())
+    print(len(set(train_u_indices_batch)), len(set(train_v_indices_batch)), len(set(train_labels_batch)))
+    adj2 = coo_matrix((train_labels_batch, (train_u_indices_batch-i*100, train_v_indices_batch)))
     a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
-    NUMCLASSES = int(adj2.max())+1
-    #class_values = np.arange(1, NUMCLASSES+1)
     adj2 = coo_matrix(adj2 + a)
-    train_u_indices_batch = adj2.data
-    train_v_indices_batch = adj2.row + 100*i
-    train_labels_batch = adj2.col
+    train_labels_batch = adj2.data
+    train_u_indices_batch = adj2.row + 100*i
+    train_v_indices_batch = adj2.col
 
     # Collect all user and item nodes for train set
     train_u = list(set(train_u_indices_batch))
@@ -441,7 +440,7 @@ for epoch in range(NB_EPOCH):
     outs = sess.run([model.embeddings, model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict_batch)
     train_avg_loss = outs[2]
     train_rmse = outs[3]
-    #print("embeddings:", outs[0][0].shape, outs[0][1].shape)
+    print("embeddings:", outs[0][0].shape, outs[0][1].shape)
     #print(len(train_u), len(train_v), len(train_u_indices_batch), len(train_v_indices_batch))
 
     val_avg_loss, val_rmse = sess.run([model.loss, model.rmse], feed_dict=val_feed_dict)

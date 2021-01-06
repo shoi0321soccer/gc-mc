@@ -192,7 +192,7 @@ class RecommenderGAE(Model):
                                            input_dim=self.hidden[1],
                                            num_users=self.num_users,
                                            num_items=self.num_items,
-                                           user_item_bias=False,
+                                           user_item_bias=True,
                                            dropout=0.,
                                            act=lambda x: x,
                                            num_weights=self.num_basis_functions,
