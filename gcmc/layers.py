@@ -423,7 +423,7 @@ class BilinearMixture(Layer):
 
         #u_inputs = tf.gather(u_inputs, self.u_indices)
         #v_inputs = tf.gather(v_inputs, self.v_indices)
-
+        print("delete gather")
         if self.user_item_bias:
             u_bias = tf.gather(self.vars['user_bias'], self.u_indices)
             v_bias = tf.gather(self.vars['item_bias'], self.v_indices)
