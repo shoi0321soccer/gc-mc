@@ -13,6 +13,7 @@ import numpy as np
 import scipy.sparse as sp
 import sys
 import json
+import random
 
 from gcmc.preprocessing import create_trainvaltest_split, \
     sparse_to_tuple, preprocess_user_item_features, globally_normalize_bipartite_adjacency, \
@@ -25,6 +26,8 @@ from scipy.sparse import csr_matrix, csc_matrix, coo_matrix, lil_matrix
 from sklearn.feature_extraction import DictVectorizer
 
 def main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count):
+    print(user_embeddings.shape)
+    print(item_embeddings.shape)
     output_file = 'output_lightFM.csv'    
     fuse_perc = 0.7
     dv = DictVectorizer()
@@ -32,8 +35,9 @@ def main_process(user_embeddings, item_embeddings, playlists_tracks, test_playli
     with open(output_file, 'w') as fout:
         print('team_info,shoiTK,creative,shoi0321soccer@gmail.com', file=fout)
         for i, playlist in enumerate(test_playlists):
-            playlist_pos = train_playlists_count + i
-            y_pred = user_embeddings[playlist_pos].dot(item_embeddings[playlist_pos//100].T) #+ item_biases
+            playlist_pos = i
+            print(playlist_pos)
+            y_pred = user_embeddings[playlist_pos].dot(item_embeddings[playlist_pos].T) #+ item_biases
             topn = np.argsort(-y_pred)[:len(playlists_tracks[playlist_pos])+1000]
             rets = [(dv.feature_names_[t], float(y_pred[t])) for t in topn]
             songids = [s for s, _ in rets if s not in playlists_tracks[playlist_pos]]
@@ -164,48 +168,40 @@ test_u_indices, test_v_indices, class_values = create_trainvaltest_split(DATASET
                                                                          datasplit_path, SPLITFROMFILE, VERBOSE)
 
 adj_train, u_features, v_features, test_playlists, \
-train_playlists_count, playlists_tracks = process_mpd(1, 100)
+train_playlists_count, playlists_tracks = process_mpd(1, 1000)
 
 train_labels = []
 train_u_indices = []
 train_v_indices = []
 last_train_labels = adj_train.shape[0]-1
 
-test_labels_set = []
-test_u_indices_set = []
-test_v_indices_set = []
+test_labels = []
+test_u_indices = []
+test_v_indices = []
 num_max = 0
 num_mini_batch = 0
 NUMCLASSES = int(adj_train.max())+1
 class_values = np.arange(1, NUMCLASSES+1)
 print("matrix size: ", sys.getsizeof(adj_train), adj_train.shape)
 for i, adj in enumerate(adj_train):
-  if (i % 100 == 99) or i == last_train_labels:
+  if (i % 100 == 99) or i == last_train_labels-1:
     adj2 = sp.vstack([adj2, adj])
     adj2 = coo_matrix(adj2.toarray())
 
-    train_labels.append(adj2.data)
+    train_labels.append(adj2.data-1)
     train_u_indices.append(adj2.row + 100*(i//100))
     train_v_indices.append(adj2.col)
-    
-    #print(coo_matrix((data, (row, col))))
-    # a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
-    # adj2 = coo_matrix(adj2 + a)
-    # test_labels_set.append(adj2.data)
-    # test_u_indices_set.append(adj2.row + 100*(i//100))
-    # test_v_indices_set.append(adj2.col)
+
     num_mini_batch += 1
   elif i % 100 == 0:
     adj2 = adj
   else:
     adj2 = sp.vstack([adj2, adj])
-
-train_u = list(set(coo_matrix(adj_train.toarray()).row))
-train_v = list(set(coo_matrix(adj_train.toarray()).col))
-
-test_labels = train_labels
-test_u_indices = train_u_indices
-test_v_indices = train_v_indices
+    if i > train_playlists_count:
+      adj = coo_matrix(adj.toarray())
+      test_labels.append(adj.data-1)
+      test_u_indices.append(adj.row + i)
+      test_v_indices.append(adj.col)
 
 test_playlists_index = list()
 for i, _ in enumerate(test_playlists):
@@ -409,14 +405,14 @@ for epoch in range(NB_EPOCH):
     train_v_indices_batch = train_v_indices[i]
     train_labels_batch = train_labels[i]
 
-    adj2 = coo_matrix((train_labels_batch, (train_u_indices_batch, train_v_indices_batch)))
-    a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
-    NUMCLASSES = int(adj2.max())+1
-    #class_values = np.arange(1, NUMCLASSES+1)
-    adj2 = coo_matrix(adj2 + a)
-    train_u_indices_batch = adj2.data
-    train_v_indices_batch = adj2.row + 100*i
-    train_labels_batch = adj2.col
+    # adj2 = coo_matrix((train_labels_batch, (train_u_indices_batch, train_v_indices_batch)))
+    # a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
+    # NUMCLASSES = int(adj2.max())+1
+    # #class_values = np.arange(1, NUMCLASSES+1)
+    # adj2 = coo_matrix(adj2 + a)
+    # train_u_indices_batch = adj2.data
+    # train_v_indices_batch = adj2.row + 100*i
+    # train_labels_batch = adj2.col
 
     # Collect all user and item nodes for train set
     train_u = list(set(train_u_indices_batch))
@@ -446,7 +442,7 @@ for epoch in range(NB_EPOCH):
 
     val_avg_loss, val_rmse = sess.run([model.loss, model.rmse], feed_dict=val_feed_dict)
 
-    if VERBOSE and batch_iter == num_mini_batch-1:
+    if VERBOSE: #and batch_iter == num_mini_batch-1:
         print('[*] Iteration: %04d' % (epoch*num_mini_batch + batch_iter),  " Epoch:", '%04d' % epoch,
               "minibatch iter:", '%04d' % batch_iter,
               "train_loss=", "{:.5f}".format(train_avg_loss),
@@ -490,15 +486,35 @@ if VERBOSE:
 user_embeddings_vstack = np.ndarray([])
 item_embeddings_vstack = []
 if TESTING:
-    for j in range(len(test_labels_set)):
-      #print(j, test_labels_set[j][:5], test_u_indices_set[j][:5], test_v_indices_set[j][:5])
-      test_u = list(set(test_u_indices_set[j]))
-      test_v = list(set(test_v_indices_set[j]))
+    for j in range(len(test_labels)):
+      test_u_indices_batch = list(test_u_indices[j])
+      test_v_indices_batch = list(test_v_indices[j])
+      test_labels_batch = list(test_labels[j])
+
+      if len(test_labels_batch) == 0:
+        test_u_indices_batch = []
+        test_v_indices_batch = []
+        test_labels_batch = []
+
+      test_u_indices_batch.append(99+100*j)
+      test_v_indices_batch.append(num_items-1)
+      test_labels_batch.append(0)
+
+      adj2 = coo_matrix((test_labels_batch, (test_u_indices_batch, test_v_indices_batch)))
+      print(adj2.shape[0], adj2.shape[1])
+      a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
+      adj2 = coo_matrix(adj2 + a)
+      test_u_indices_batch = adj2.data-1
+      test_v_indices_batch = adj2.row + j
+      test_labels_batch = adj2.col
+
+      test_u = list(set(test_u_indices_batch))
+      test_v = list(set(test_v_indices_batch))
       #print(len(test_u), len(test_v))
       test_u_dict = {n: i for i, n in enumerate(test_u)}
       test_v_dict = {n: i for i, n in enumerate(test_v)}
-      test_u_indices_batch = np.array([test_u_dict[o] for o in test_u_indices_set[j]])
-      test_v_indices_batch = np.array([test_v_dict[o] for o in test_v_indices_set[j]])
+      test_u_indices_batch = np.array([test_u_dict[o] for o in test_u_indices_batch])
+      test_v_indices_batch = np.array([test_v_dict[o] for o in test_v_indices_batch])
 
       test_support_batch = sparse_to_tuple(support[np.array(test_u)])
       test_support_t_batch = sparse_to_tuple(support_t[np.array(test_v)])
@@ -507,13 +523,14 @@ if TESTING:
                                                   v_features_nonzero,
                                                   test_support_batch,
                                                   test_support_t_batch,
-                                                  test_labels_set[j], test_u_indices_batch,
+                                                  test_labels_batch, test_u_indices_batch,
                                                   test_v_indices_batch, class_values, DO)
 
       outs = sess.run([model.embeddings, model.loss, model.rmse], feed_dict=test_feed_dict_batch)
       embeddings = outs[0]
       user_embeddings = embeddings[0]
       item_embeddings = embeddings[1]
+      print(user_embeddings.shape, item_embeddings.shape)      
       if j == 0:
         user_embeddings_vstack = user_embeddings
         item_embeddings_vstack.append(item_embeddings)
