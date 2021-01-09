@@ -49,10 +49,11 @@ class Model(object):
 
         # Build sequential layer model
         self.activations.append(self.inputs)
+        print("build")
         for layer in self.layers:
-            print(layer)
-            hidden = layer(self.activations[-1])
-            self.activations.append(hidden)
+          print(layer)
+          hidden = layer(self.activations[-1])
+          self.activations.append(hidden)
         self.outputs = self.activations[-1]
 
         # Store model variables for easy access
