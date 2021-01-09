@@ -9,6 +9,7 @@ gcmc/initializations.py
 gcmc/layers.py
 gcmc/metrics.py
 gcmc/model.py
+gcmc/output_lightFM.csv
 gcmc/preprocessing.py
 gcmc/process_music.py
 gcmc/run_experiments.sh

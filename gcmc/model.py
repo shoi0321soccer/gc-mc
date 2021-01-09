@@ -50,6 +50,7 @@ class Model(object):
         # Build sequential layer model
         self.activations.append(self.inputs)
         for layer in self.layers:
+            print(layer)
             hidden = layer(self.activations[-1])
             self.activations.append(hidden)
         self.outputs = self.activations[-1]
@@ -284,7 +285,7 @@ class RecommenderSideInfoGAE(Model):
                                                  bias=False,
                                                  dropout=self.dropout,
                                                  logging=self.logging,
-                                                 share_user_item_weights=True,
+                                                 share_user_item_weights=False,
                                                  self_connections=self.self_connections))
 
         elif self.accum == 'stack':
@@ -299,7 +300,7 @@ class RecommenderSideInfoGAE(Model):
                                         act=tf.nn.relu,
                                         dropout=self.dropout,
                                         logging=self.logging,
-                                        share_user_item_weights=True))
+                                        share_user_item_weights=False))
 
         else:
             raise ValueError('accumulation function option invalid, can only be stack or sum.')

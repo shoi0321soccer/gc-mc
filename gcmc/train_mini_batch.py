@@ -168,7 +168,7 @@ test_u_indices, test_v_indices, class_values = create_trainvaltest_split(DATASET
                                                                          datasplit_path, SPLITFROMFILE, VERBOSE)
 
 adj_train, u_features, v_features, test_playlists, \
-train_playlists_count, playlists_tracks = process_mpd(1, 1000)
+train_playlists_count, playlists_tracks = process_mpd(1, 100)
 
 train_labels = []
 train_u_indices = []
@@ -434,9 +434,20 @@ for epoch in range(NB_EPOCH):
                                                 train_v_indices_batch, class_values, DO)
 
     # with exponential moving averages
-    outs = sess.run([model.embeddings, model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict_batch)
+    outs = sess.run([model.activations, model.training_op, model.loss, model.rmse], feed_dict=train_feed_dict_batch)
     train_avg_loss = outs[2]
     train_rmse = outs[3]
+
+    act1 = list(outs[0][0])
+    act2 = list(outs[0][1])
+    act3 = list(outs[0][2])
+    act4 = outs[0][3]
+    print(coo_matrix(act1[0][0]).shape, coo_matrix(act1[0][1]).shape)
+    print(coo_matrix(act2[0]).shape, coo_matrix(act2[1]).shape)
+    print(coo_matrix(act3[0]).shape, coo_matrix(act3[1]).shape)
+    print(act4.shape)
+
+    sys.exit()
     #print("embeddings:", outs[0][0].shape, outs[0][1].shape)
     #print(len(train_u), len(train_v), len(train_u_indices_batch), len(train_v_indices_batch))
 
