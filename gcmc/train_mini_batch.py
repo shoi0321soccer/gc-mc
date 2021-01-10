@@ -15,11 +15,12 @@ import sys
 import json
 import random
 from layers import *
+from layers import BilinearMixture, StackGCN, Dense
 
 from gcmc.preprocessing import create_trainvaltest_split, \
     sparse_to_tuple, preprocess_user_item_features, globally_normalize_bipartite_adjacency, \
     load_data_monti, load_official_trainvaltest_split, normalize_features
-from gcmc.model import RecommenderGAE, RecommenderSideInfoGAE
+from model import RecommenderGAE, RecommenderSideInfoGAE
 from gcmc.utils import construct_feed_dict
 from data_utils import data_iterator
 from process_music import process_mpd
@@ -28,7 +29,7 @@ from sklearn.feature_extraction import DictVectorizer
 
 def main_process(user_embeddings, item_embeddings, playlists_tracks, test_playlists, train_playlists_count):
     print(user_embeddings.shape)
-    print(item_embeddings.shape)
+    print(len(item_embeddings))
     output_file = 'output_lightFM.csv'    
     fuse_perc = 0.7
     dv = DictVectorizer()
@@ -169,7 +170,7 @@ test_u_indices, test_v_indices, class_values = create_trainvaltest_split(DATASET
                                                                          datasplit_path, SPLITFROMFILE, VERBOSE)
 
 adj_train, u_features, v_features, test_playlists, \
-train_playlists_count, playlists_tracks = process_mpd(1, 100)
+train_playlists_count, playlists_tracks = process_mpd(1, 10000)
 
 train_labels = []
 train_u_indices = []
@@ -183,6 +184,7 @@ num_max = 0
 num_mini_batch = 0
 NUMCLASSES = int(adj_train.max())+1
 class_values = np.arange(1, NUMCLASSES+1)
+adj_test = []
 print("matrix size: ", sys.getsizeof(adj_train), adj_train.shape)
 for i, adj in enumerate(adj_train):
   if (i % 100 == 99) or i == last_train_labels-1:
@@ -198,11 +200,12 @@ for i, adj in enumerate(adj_train):
     adj2 = adj
   else:
     adj2 = sp.vstack([adj2, adj])
-    if i > train_playlists_count:
-      adj = coo_matrix(adj.toarray())
-      test_labels.append(adj.data-1)
-      test_u_indices.append(adj.row + i)
-      test_v_indices.append(adj.col)
+
+adj_test = adj_train[train_playlists_count:]
+adj = coo_matrix(adj_test.toarray())
+test_labels = list(adj.data-1)
+test_u_indices = list(adj.row)
+test_v_indices = list(adj.col)
 
 test_playlists_index = list()
 for i, _ in enumerate(test_playlists):
@@ -439,16 +442,20 @@ for epoch in range(NB_EPOCH):
     train_avg_loss = outs[2]
     train_rmse = outs[3]
 
-    act1 = list(outs[0][0])
-    act2 = list(outs[0][1])
-    act3 = list(outs[0][2])
-    act4 = outs[0][3]
-    print(coo_matrix(act1[0][0]).shape, coo_matrix(act1[0][1]).shape)
-    print(coo_matrix(act2[0]).shape, coo_matrix(act2[1]).shape)
-    print(coo_matrix(act3[0]).shape, coo_matrix(act3[1]).shape)
-    print(act4.shape)
+    # act1 = list(outs[0][0])
+    # act2 = list(outs[0][1])
+    # act3 = list(outs[0][2])
+    # act4 = outs[0][3]
+    # print(act1[0][0])
+    # print(act1[1][1])
+    # print(act1[0][0])
+    # print(act1[1][1])
+    # print(coo_matrix(act1[0]).shape, coo_matrix(act1[1]).shape)
+    # print(coo_matrix(act2[0]).shape, coo_matrix(act2[1]).shape)
+    # print(coo_matrix(act3[0]).shape, coo_matrix(act3[1]).shape)
+    # print(act4.shape)
 
-    sys.exit()
+    # sys.exit()
     #print("embeddings:", outs[0][0].shape, outs[0][1].shape)
     #print(len(train_u), len(train_v), len(train_u_indices_batch), len(train_v_indices_batch))
 
@@ -498,27 +505,27 @@ if VERBOSE:
 user_embeddings_vstack = np.ndarray([])
 item_embeddings_vstack = []
 if TESTING:
-    for j in range(len(test_labels)):
-      test_u_indices_batch = list(test_u_indices[j])
-      test_v_indices_batch = list(test_v_indices[j])
-      test_labels_batch = list(test_labels[j])
+    for j in range(1):
+      test_u_indices_batch = list(test_u_indices)
+      test_v_indices_batch = list(test_v_indices)
+      test_labels_batch = list(test_labels)
 
-      if len(test_labels_batch) == 0:
-        test_u_indices_batch = []
-        test_v_indices_batch = []
-        test_labels_batch = []
+      # if len(test_labels_batch) == 0:
+      #   test_u_indices_batch = []
+      #   test_v_indices_batch = []
+      #   test_labels_batch = []
 
-      test_u_indices_batch.append(99+100*j)
-      test_v_indices_batch.append(num_items-1)
-      test_labels_batch.append(0)
+      # test_u_indices_batch.append(99+100*j)
+      # test_v_indices_batch.append(num_items-1)
+      # test_labels_batch.append(0)
 
-      adj2 = coo_matrix((test_labels_batch, (test_u_indices_batch, test_v_indices_batch)))
-      print(adj2.shape[0], adj2.shape[1])
-      a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
-      adj2 = coo_matrix(adj2 + a)
-      test_u_indices_batch = adj2.data-1
-      test_v_indices_batch = adj2.row + j
-      test_labels_batch = adj2.col
+      # adj2 = coo_matrix((test_labels_batch, (test_u_indices_batch, test_v_indices_batch)))
+      # print(adj2.shape[0], adj2.shape[1])
+      # a = coo_matrix(np.ones((adj2.shape[0], adj2.shape[1])))
+      # adj2 = coo_matrix(adj2 + a)
+      # test_u_indices_batch = adj2.data-1
+      # test_v_indices_batch = adj2.row + j
+      # test_labels_batch = adj2.col
 
       test_u = list(set(test_u_indices_batch))
       test_v = list(set(test_v_indices_batch))
